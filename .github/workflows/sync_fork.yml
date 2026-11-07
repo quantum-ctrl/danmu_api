@@ -5,40 +5,28 @@ permissions:
 
 on:
     schedule:
-        - cron: "0 0 * * *"  # 每天午夜执行
-    workflow_dispatch:  # 允许手动触发
+        - cron: "0 0 * * *"  # 每天 UTC 午夜执行，实际启动时间可能延迟
+    workflow_dispatch:
+
+concurrency:
+    group: fork-sync-main
+    cancel-in-progress: false
 
 jobs:
     sync_with_upstream:
         name: Sync with Upstream
         runs-on: ubuntu-latest
+        timeout-minutes: 10
         if: ${{ github.event.repository.fork }}
 
         steps:
             - name: Checkout target repo
               uses: actions/checkout@v5
               with:
-                token: ${{ secrets.GITHUB_TOKEN }}
+                ref: main
+                fetch-depth: 0
 
-            - name: Sync Upstream
-              uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.3
-              with:
-                  target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-                  upstream_sync_repo: huangxd-/danmu_api
-                  upstream_sync_branch: main
-                  target_sync_branch: main
-                  test_mode: false
-
-            - name: Check for new commits
-              if: success()
-              run: echo "Sync completed successfully"
-
-            - name: Check for Failure
-              if: failure()
-              run: |
-                  echo "[Error] Sync failed. This might be due to:"
-                  echo "1. Changes in the upstream workflow file"
-                  echo "2. Merge conflicts that need manual resolution"
-                  echo "3. Network issues"
-                  echo "Please check the logs and consider manual sync if needed."
-                  exit 1
+            # GITHUB_TOKEN 无法修改 workflow 文件；保留本仓库的工作流，
+            # 仅同步其余代码。上游工作流更新需要单独人工审核和同步。
+            - name: Sync upstream code and preserve local workflows
+              run: bash .github/scripts/sync-upstream.sh
